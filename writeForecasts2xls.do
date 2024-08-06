@@ -43,49 +43,66 @@ foreach question in q9 q9c {
 	egen _rm_`question'=rowtotal(f_`question'*) 
 	
 }
-blah
-//Write the xls files for one-year forecasts.
-//Keep only the data we need for the excel files. 
-keep q9_bin1 q9_bin2 q9_bin3 q9_bin4 q9_bin5 q9_bin6 q9_bin7 q9_bin8 q9_bin9 q9_bin10 q8v2part2 _rm_q9
 
-//These files get used to fit an implied density with the point forecasts and the bin probabilities. If two or more records share the same data, then we only need to calculate the implied density once. Therefore, we remove duplicates by ``collapsing'' the data by the relevant variables.
+//Organize the question names for easier use with reshape
+rename q8v2part2 point_1
+rename q9bv2part2 point_3
+rename q9_* *_1 
+rename q9c_* *_3
+rename _rm_q9 _rm_1
+rename _rm_q9c _rm_3
+
+//Keep only the forecast variables.
+keep point_1 bin*_1 _rm_1 point_3 bin*_3 _rm_3
+
+//Create an identifier for use by reshape
+gen id=_n
+
+//Reshape the data so that every forecast is a row.
+reshape long point_ bin1_ bin2_ bin3_ bin4_ bin5_ bin6_ bin7_ bin8_ bin9_ bin10_ _rm_, i(id) j(horizon)
+
+//For the purpose of fitting distributions, we care do not care about the horizon or about linking forecasts within people. Drop these variables.
+drop id horizon
+
+
+//These files get used to fit an implied density with the point forecasts and the bin probabilities. If two or more records share the same data, then we only need to calculate the implied density once. Therefore, we remove duplicates.
 //Somewhat surprisingly, this operation reduces the number of observations by a factor of at least 2. 
-duplicates drop q9_bin1 q9_bin2 q9_bin3 q9_bin4 q9_bin5 q9_bin6 q9_bin7 q9_bin8 q9_bin9 q9_bin10 q8v2part2, force
+duplicates drop point_ bin* , force
 
-//Drop any records with no bin frequency data.
-drop if _rm_q9 == 10
+//The procedure for fitting distributions requires both bin-frequency and point-estimate data. Drop records missing either of these.
+drop if _rm_ == 10
 
 //Drop any records without point estimates
-drop if mi(q8v2part2) 
+drop if mi(point_) 
 
 //Drop any records with bin frequency data that do not sum to 100 percent. (The CAR system should ensure that this never happens, but... .)
-gen sum_q9 = q9_bin1 + q9_bin2 + q9_bin3 + q9_bin4 + q9_bin5 + q9_bin6 + q9_bin7 + q9_bin8 + q9_bin9 + q9_bin10
-drop if sum_q9 != 100
-drop sum_q9
+egen binsum=rsum(bin*) 
+sum binsum, d
+drop if binsum != 100
+drop binsum
 
 //Give the variables a fixed order for the xls files. 
-order q8v2part2 q9_bin1 q9_bin2 q9_bin3 q9_bin4 q9_bin5 q9_bin6 q9_bin7 q9_bin8 q9_bin9 q9_bin10 _rm_q9
+order point_ bin1_ bin2_ bin3_ bin4_ bin5_ bin6_ bin7_ bin8_ bin9_ bin10_ _rm_ 
 
 //Next, we generate three excel spreadsheets.  
 preserve
 
-//Pool all forecast horizons. 
 //The first spreadsheet contains only those records with all probability placed into one bin.
-keep if _rm_q9 == 9
-export excel using "1year_1bin.xls", replace
+keep if _rm_ == 9
+export excel using "_1bin.xlsx", replace
 
 restore
 preserve
 
 //The second spreadsheet contains only those records with all probabilty placed into two bins.
-keep if _rm_q9 == 8
-export excel using "1year_2bin.xls", replace
+keep if _rm_ == 8
+export excel using "_2bin.xlsx", replace
 
 restore
 preserve
 
 //The third spreadsheet contains only those records with positive probability placed into three or more bins.
-keep if _rm_q9 < 8
-export excel using "1year_3bins.xlsx", replace
+keep if _rm_ < 8
+export excel using "_3bins.xlsx", replace
 
 restore
