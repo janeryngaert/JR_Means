@@ -2,7 +2,7 @@
 clear all
 
 //Note that the first row of this spreadsheet contains bibliographic information about the SCE. Therefore, we specify the range of data to be imported explicitly so that the ``firstrow'' option points to the cells containing variable names.
-import excel "frbny-sce-public-microdata-latest.xlsx", sheet("Data") cellrange(A2:HL30155) firstrow case(lower)
+import excel ".\sce_raw_data\frbny-sce-public-microdata-latest.xlsx", sheet("Data") cellrange(A2:HL30155) firstrow case(lower)
 
 //The date variable is imported as a long integer. turn it into a string so that we can more easily extract the year and month.
 tostring date, replace force
