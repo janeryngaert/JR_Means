@@ -1,56 +1,68 @@
-clear
+%NY_Fed_1bin_tri.m
+%This file reads the forecasts records with all probability placed into a
+%single bin and fits a triangual distribution to each one. The procedure
+%builds upon that used by the NY Fed, but with the major difference that
+%the distribution's mode is set to equal the reported point estimate.
 
-%data = xlsread('3year_1bin.xls');
-data = xlsread('1year_1bin.xls');
+%Read the data. (This file gets created by writeForecasts2xls.do.)
+data = xlsread('_1bin.xlsx');
 
-%File is writtten assuming following order of import for 1year forecasts
-%(replace with similar terminology for 3year
-% [q8v2part2, qb_bin1, q9_bin2 .... q9_bin10]  bin1 is highest inflation
-% outcome and bin10 is lowest, in what follows I use this ordering coupled
-% with the flip to put bins in order from lowest to highest.  This can of
-% course be changed
+%The file is organized with the point estimates in the first column, bins
+%1-10 in the next ten columns, and a count of the number of bins with no
+%probability mass in the last column.
 
-% point estimates
-p = data(:,1);
-p = p(~isnan(p));
+%Check prerequesites.
+assert(size(data,2)==12); %The input data has 12 columns.
+assert(~any(ismissing(data))); %No data should be missing.
+assert(all(data(:,end)==9)); %Exactly one bin should be not empty.
 
+% Create a vector with the intervals' lower bounds.
+ll = [ 12, 8, 4, 2, 0, -2, -4, -8, -12, -38];
+% Create a vector with the intervals' upper bounds.
+rr = [38, 12, 8, 4, 2, 0, -2, -4, -8, -12];
 
-% lower bound
-ll = flip([ 12, 8, 4, 2, 0, -2, -4, -8, -12, -38]);
-% upper bound
-rr = flip([38, 12, 8, 4, 2, 0, -2, -4, -8, -12]);
-% bounds of outer bins are set at -38 and 38 to match NY Fed - because they
-% use a uniform distribution for forecasts that assign only one bin, I
+% The NY Fed sets the bounds of outer bins are set at -38 and 38. I
 % think they choose this bound to make the implied mean forcast for those
 % filling only one of the outer bins -25 or 25
 
-% percentiles to solve for for each distribution
-cent = [0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95];
+% Quantiles calculated from each distribution.
+desiredQuantiles = [0.05, 0.10, 0.25, 0.5, 0.75, 0.90, 0.95];
+
+%Describe what we are putting in and what we are getting out for each
+%record.
 
 % preallocate for mean, l, r, percentiles, 
 Epi = zeros(length(p),1);
 flag = zeros(length(p),1);
 low = zeros(length(p),1);
 high = zeros(length(p),1);
-centi = zeros(length(data),length(cent));
+quantiles = zeros(length(data),length(desiredQuantiles));
 
+% The NY Fed's convention places the highest inflation outcomes in
+% bin1, the next highest in bin2, etc. Therefore, the bin labels
+% increment ``backwards'' relative to the inflation outcomes
+% themselves.
+% To make this code clearer, we flip this ordering of the columns in
+% ll, rr, and data.
+ll = fliplr(ll);
+rr = fliplr(rr);
+prob = fliplr(data(:,2:11));
+
+%Umpack the point estimates.
+p = data(:,1);
 for i = 1:length(data)
-
-    % data imports backwards because q9_bin1 is the highest inflation bin
-    % and q9_bin10 is the lowest inflation, flip the data so that the bins
-    % appear in order on the number line
-
-    prob = flip(data(i,(2:11)));
-    
-    % find the bin with positive probability - for this example there will
-    % be exactly one
-    f = find(prob > 0);
+        
+    % find the single bin with positive probability.
+    f = find(prob(i,:) > 0);
     % left bound
     l = ll(f);
     %right bound
     r = rr(f);
     %point estimate
-    pp = p(i,1);
+    pp = p(i);
+
+
+
 
     % save left and right bounds
     % l and r will be used to indicate bounds of support of distribution
@@ -71,12 +83,7 @@ for i = 1:length(data)
         
     end
 
-    % distribution will take the shape of a triangle - area of a triangle
-    % is (0.5)*base*height
-    % base is equal to right bound - left bound (r - l)
-    % area under pdf = 1
-    % height (h) is therefore given by the following
-    h = 2/(r - l);
+
      
     % go through options - if mode (pp) is at a boundary of the
     % distribution, distribution is a right triangle and the pdf is given
@@ -131,19 +138,19 @@ for i = 1:length(data)
         % Replacing centi with x here just for quadratic equation:
         % x^2 + -2rx + [r^2 - (1-cent(j))*(r-l)^2]
 
-        for j = 1:length(cent)
+        for j = 1:length(desiredQuantiles)
         
             % quadratic coefficients and constants from above equation
             aa = 1;
             bb = -2*r;
-            cc = (r^2) - (((r - l)^2)*(1 - cent(1,j)));
+            cc = (r^2) - (((r - l)^2)*(1 - desiredQuantiles(1,j)));
             % find roots
             d = sqrt(bb^2 - 4*aa*cc);
             y(1) = ( -bb + d ) / (2*aa);
             y(2) = ( -bb - d ) / (2*aa);
             
             %choose root that is in the support of the distribution
-            centi(i,j) = y(y>l & y<r);
+            quantiles(i,j) = y(y>l & y<r);
     
         end
         
@@ -190,19 +197,19 @@ for i = 1:length(data)
     % Replacing centi with x here just for quadratic equation:
     % x^2 + -2lx + [l^2 - cent(j)*((r-l)^2)]
 
-        for j = 1:length(cent)
+        for j = 1:length(desiredQuantiles)
         
             % quadratic coefficients and constants from above equation
             aa = 1;
             bb = -2*l;
-            cc = (l^2) - (((r - l)^2)*(cent(1,j)));
+            cc = (l^2) - (((r - l)^2)*(desiredQuantiles(1,j)));
             % find roots
             d = sqrt(bb^2 - 4*aa*cc);
             y(1) = ( -bb + d ) / (2*aa);
             y(2) = ( -bb - d ) / (2*aa);
             
             %choose root that is in the support of the distribution
-            centi(i,j) = y(y>l & y<r);
+            quantiles(i,j) = y(y>l & y<r);
     
         end
         
@@ -254,9 +261,9 @@ for i = 1:length(data)
         %  Any percentile larger than pr will be calculated similarly to those in CASE ONE
         %  These will use T4 for the trigonometric ratios
 
-        for j = 1:length(cent)
+        for j = 1:length(desiredQuantiles)
         
-            if cent(1,j) < pr
+            if desiredQuantiles(1,j) < pr
 
                 % variation on percentiles from CASE TWO percentile ``centi'' will
                 % form a right triangle (T2) with area cent(j) between (l,0)
@@ -287,7 +294,7 @@ for i = 1:length(data)
                 %quadratic formula coefficients
                 aa = 1;
                 bb = -2*l;
-                cc = (l^2) - (((pp-l)*(r-l))*(cent(1,j)));
+                cc = (l^2) - (((pp-l)*(r-l))*(desiredQuantiles(1,j)));
                 
                 % solve for roots
                 d = sqrt(bb^2 - 4*aa*cc);
@@ -295,9 +302,9 @@ for i = 1:length(data)
                 y(2) = ( -bb - d ) / (2*aa);
             
                 % choose value between l and pp
-                centi(i,j) = y(y >= l & y <= pp);
+                quantiles(i,j) = y(y >= l & y <= pp);
             
-            elseif cent(1,j) >= pr
+            elseif desiredQuantiles(1,j) >= pr
             
                 % variation on percentiles from CASE ONE percentile ``centi'' will
                 % form a right triangle (T2) with area (1 - cent(j)) between
@@ -320,7 +327,7 @@ for i = 1:length(data)
                 % quadratic coefficients
                 aa = 1;
                 bb = -2*r;
-                cc = (r^2) - (((r - pp)*(r-l))*(1 - cent(1,j)));
+                cc = (r^2) - (((r - pp)*(r-l))*(1 - desiredQuantiles(1,j)));
                 
                 % solve for roots
                 d = sqrt(bb^2 - 4*aa*cc);
@@ -328,7 +335,7 @@ for i = 1:length(data)
                 y(2) = ( -bb - d ) / (2*aa);
             
                 % find roots in range [pp, r]
-                centi(i,j) = y(y >= pp & y <= r);
+                quantiles(i,j) = y(y >= pp & y <= r);
                 
             end
         end
@@ -348,14 +355,14 @@ end
 
 
 
-A1 = [data(:, (1:12)), Epi, centi, low, high, p2];
+A1 = [data(:, (1:12)), Epi, quantiles, low, high, p2];
 
 xlswrite('Epi_1year_1bin.xlsx', A1);
 
 
+%%Jane, can I delete the code below? JRC
 
-
-A = [low, centi, high, p, Epi];
+A = [low, quantiles, high, p, Epi];
 
 
 % a check for the percentiles - if 
